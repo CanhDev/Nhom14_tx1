@@ -1,0 +1,89 @@
+version: '3.8'  # Dùng phiên bản phù hợp nếu cần
+
+services:
+  rabbitmq:
+    image: library/rabbitmq:3.8.9-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    container_name: rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.0.1
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:  # Đảm bảo dịch vụ kafka có tên đúng là 'kafka'
+    image: confluentinc/cp-kafka:7.0.1
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - ~/apps/mongodb:/var/lib/mongodb/data
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootuser
+      MONGO_INITDB_DATABASE: admin
+
+  # Producer Service
+  producer-service:
+    build:
+      context: ./producer-service  # Đảm bảo đường dẫn chính xác tới thư mục của producer-service
+    container_name: producer-service
+    depends_on:
+      - kafka  # Dịch vụ kafka được tham chiếu chính xác ở đây
+      - mongodb
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8081:8081"
+
+  # Consumer Service
+  consumer-service:
+    build:
+      context: ./consumer-service  # Đảm bảo đường dẫn chính xác tới thư mục của consumer-service
+    container_name: consumer-service
+    depends_on:
+      - kafka  # Dịch vụ kafka được tham chiếu chính xác ở đây
+      - mongodb
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8082:8082"
+
+  # User Service
+  user-service:
+    build:
+      context: ./user-service  # Đảm bảo đường dẫn chính xác tới thư mục của user-service
+    container_name: user-service
+    depends_on:
+      - kafka  # Dịch vụ kafka được tham chiếu chính xác ở đây
+      - mongodb
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8083:8083"
